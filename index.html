@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Product Saver</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef1f5;--surface:#fff;--ink:#16212e;--muted:#5b6776;--line:#d5dce5;--accent:#0f6b5c;--accent-ink:#fff;--danger:#b3261e;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1620;--surface:#18222f;--ink:#e8edf3;--muted:#9aa7b6;--line:#2a3646;--accent:#3fbfa6;--accent-ink:#06211c;--danger:#ff8a80}}
+:root[data-theme="dark"]{--bg:#0f1620;--surface:#18222f;--ink:#e8edf3;--muted:#9aa7b6;--line:#2a3646;--accent:#3fbfa6;--accent-ink:#06211c;--danger:#ff8a80}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+.wrap{max-width:960px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:2rem;font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 24px}
+form{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.full{grid-column:1/-1}
+label{display:block;font-size:.85rem;font-weight:600;margin-bottom:5px}
+input,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.price{display:flex;gap:8px}.price select{width:80px}
+.pick{display:flex;gap:12px;align-items:center}
+.pick img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:none}
+button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:11px 18px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+button.ghost{background:transparent;color:var(--danger);padding:6px 10px;border:1px solid var(--line)}
+.err{color:var(--danger);font-size:.85rem;min-height:1.2em;margin:0}
+.bar{display:flex;gap:12px;align-items:center;margin:30px 0 14px}
+.bar input{flex:1;font-size:1.05rem;padding:13px 14px}
+.count{color:var(--muted);font-size:.9rem;white-space:nowrap}
+.list{display:grid;gap:12px}
+.item{display:grid;grid-template-columns:110px 1fr auto;gap:16px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;align-items:center}
+.item img,.noimg{width:110px;height:110px;object-fit:cover;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
+.noimg{display:grid;place-items:center;color:var(--muted);font-size:.8rem}
+.item h3{margin:0;font-size:1.1rem;overflow-wrap:anywhere}
+.item .p{font-size:1.25rem;font-weight:800;color:var(--accent);margin:2px 0}
+.item a{color:var(--ink);font-size:.9rem;overflow-wrap:anywhere}
+.when{color:var(--muted);font-size:.85rem;margin-top:4px}
+.empty{text-align:center;color:var(--muted);padding:40px 10px;border:1px dashed var(--line);border-radius:14px}
+@media (max-width:620px){form{grid-template-columns:1fr}.item{grid-template-columns:84px 1fr}.item img,.noimg{width:84px;height:84px}.item .act{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Product Saver</h1>
+  <p class="sub">Save a product’s name, link, photo and price. Search by name to find it again.</p>
+
+  <form id="f">
+    <div class="full"><label for="name">Product name</label><input id="name" required maxlength="120" placeholder="e.g. Noise-cancelling headphones"></div>
+    <div class="full"><label for="link">Product link</label><input id="link" type="url" required placeholder="https://..."></div>
+    <div><label for="amt">Price</label><div class="price"><select id="cur" aria-label="Currency"><option>₹</option><option>$</option><option>€</option><option>£</option></select><input id="amt" type="number" min="0" step="0.01" required placeholder="0.00"></div></div>
+    <div><label for="img">Product photo</label><div class="pick"><input id="img" type="file" accept="image/*"><img id="prev" alt="Photo preview"></div></div>
+    <div class="full"><label for="imgurl">Or paste an image link (optional)</label><input id="imgurl" type="url" placeholder="https://example.com/photo.jpg"></div>
+    <div class="full"><p class="err" id="err" role="alert"></p><button type="submit">Save product</button></div>
+  </form>
+
+  <div class="bar">
+    <input id="q" type="search" placeholder="Search saved products by name" aria-label="Search products">
+    <span class="count" id="count"></span>
+  </div>
+  <div class="list" id="list"></div>
+</div>
+
+<script>
+var KEY = "product-saver:items";
+var items = [];
+var photo = "";
+
+function load() {
+  try { items = JSON.parse(localStorage.getItem(KEY) || "[]"); if (!Array.isArray(items)) items = []; }
+  catch (e) { items = []; }
+}
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(items)); return true; }
+  catch (e) { return false; }
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+function fmtWhen(ts) {
+  var d = new Date(ts);
+  return d.toLocaleDateString(undefined, {day:"numeric", month:"short", year:"numeric"}) + " at " +
+         d.toLocaleTimeString(undefined, {hour:"numeric", minute:"2-digit"});
+}
+function safeUrl(u) { return /^https?:\/\//i.test(u) ? u : "#"; }
+
+function render() {
+  var q = document.getElementById("q").value.trim().toLowerCase();
+  var found = items.filter(function (it) { return it.name.toLowerCase().indexOf(q) !== -1; });
+  var list = document.getElementById("list");
+  document.getElementById("count").textContent = found.length + " of " + items.length + " shown";
+  if (!found.length) {
+    list.innerHTML = '<div class="empty">' + (items.length ? "No saved product matches that name." : "Nothing saved yet. Add your first product above.") + "</div>";
+    return;
+  }
+  list.innerHTML = found.map(function (it) {
+    var img = it.image ? '<img src="' + it.image + '" alt="' + esc(it.name) + '">' : '<div class="noimg">No photo</div>';
+    return '<article class="item">' + img +
+      '<div><h3>' + esc(it.name) + '</h3>' +
+      '<div class="p">' + esc(it.cur) + Number(it.price).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) + '</div>' +
+      '<a href="' + esc(safeUrl(it.link)) + '" target="_blank" rel="noopener noreferrer">' + esc(it.link) + '</a>' +
+      '<div class="when">Saved ' + fmtWhen(it.savedAt) + '</div></div>' +
+      '<div class="act"><button class="ghost" data-id="' + it.id + '">Delete</button></div></article>';
+  }).join("");
+}
+
+function shrink(file, cb) {
+  var r = new FileReader();
+  r.onload = function () {
+    var im = new Image();
+    im.onload = function () {
+      var max = 400, s = Math.min(1, max / Math.max(im.width, im.height));
+      var c = document.createElement("canvas");
+      c.width = Math.round(im.width * s); c.height = Math.round(im.height * s);
+      c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+      cb(c.toDataURL("image/jpeg", 0.8));
+    };
+    im.onerror = function () { cb(""); };
+    im.src = r.result;
+  };
+  r.onerror = function () { cb(""); };
+  r.readAsDataURL(file);
+}
+
+document.getElementById("img").addEventListener("change", function (e) {
+  var file = e.target.files[0], prev = document.getElementById("prev");
+  photo = ""; prev.style.display = "none";
+  if (!file) return;
+  shrink(file, function (data) {
+    photo = data;
+    if (data) { prev.src = data; prev.style.display = "block"; }
+  });
+});
+
+document.getElementById("f").addEventListener("submit", function (e) {
+  e.preventDefault();
+  var err = document.getElementById("err"); err.textContent = "";
+  var link = document.getElementById("link").value.trim();
+  if (!/^https?:\/\//i.test(link)) { err.textContent = "The link must start with http:// or https://"; return; }
+  var imgurl = document.getElementById("imgurl").value.trim();
+  if (imgurl && !/^https?:\/\//i.test(imgurl)) { err.textContent = "The image link must start with http:// or https://"; return; }
+  items.unshift({
+    id: String(Date.now()) + Math.random().toString(36).slice(2, 6),
+    name: document.getElementById("name").value.trim(),
+    link: link,
+    price: document.getElementById("amt").value,
+    cur: document.getElementById("cur").value,
+    image: photo || imgurl,
+    savedAt: Date.now()
+  });
+  if (!persist()) err.textContent = "Saved for this visit only. Your browser blocked storage, so it will be gone after you close the page.";
+  e.target.reset(); photo = ""; document.getElementById("prev").style.display = "none";
+  document.getElementById("q").value = "";
+  render();
+});
+
+document.getElementById("q").addEventListener("input", render);
+document.getElementById("list").addEventListener("click", function (e) {
+  var id = e.target.getAttribute && e.target.getAttribute("data-id");
+  if (!id) return;
+  items = items.filter(function (it) { return it.id !== id; });
+  persist(); render();
+});
+
+load(); render();
+</script>
+</body>
+</html>
